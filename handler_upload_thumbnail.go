@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"io"
-	"encoding/base64"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -30,7 +31,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
 	const maxMemory = 10 << 20
@@ -42,12 +42,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer file.Close()
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to read file", err)
-		return
-	}
 
 	mediaType := header.Header.Get("Content-Type")
 	if mediaType == "" {
@@ -66,15 +60,30 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	encodedData := base64.StdEncoding.EncodeToString(data)
-	fullDataURL := fmt.Sprintf("data:%s;base64,%s", mediaType, encodedData)
-	video.ThumbnailURL = &fullDataURL
+	file_extension := strings.Split(mediaType, "/")
+	joinVidExt := fmt.Sprintf("%s.%s", videoID, file_extension[1])
 
-	err = cfg.db.UpdateVideo(video)
+	assetPath := filepath.Join(cfg.assetssRoot, joinVidExt)
+	assetDiskPath, err := os.Create(assetPath)
+	if err != nil {
+		log.Fatal("Couldn't create Filepath")
+	}
+	dest, err := io.Copy(assetDiskPath, file)
+	if err != nil {
+		log.Fatal("Couldn't copy file to destination")
+	}
+	defer assetDiskPath.Close()
+
+	fullDataURL, err := cfg.getAssetURL(joinVidExt)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Cannot update video", err)
 		return
 	}
-
+	video.ThumbnailURL = &fullDataURL
+	_, err = cfg.db.UpdateVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
+		return
+	}
 	respondWithJSON(w, http.StatusOK, video)
 }
