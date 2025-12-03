@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"path/filepath"
+	"strings"
 	"log"
 	"net/http"
 	"os"
@@ -8,6 +11,7 @@ import (
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/google/uuid"
 )
 
 type apiConfig struct {
@@ -20,6 +24,20 @@ type apiConfig struct {
 	s3Region         string
 	s3CfDistribution string
 	port             string
+}
+
+func getAssetPath(videoID uuid.UUID, mediaType string) string {
+	parts := strings.Split(mediaType, "/")
+	fileExtension := parts[len(parts)-1]
+	return fmt.Sprintf("%s.%s", videoID.String(), fileExtension)
+}
+
+func (cfg *apiConfig) getAssetURL(assetPath string) string {
+	return fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, assetPath)
+}
+
+func (cfg *apiConfig) getAssetDiskPath(assetPath string) string {
+	return filepath.Join(cfg.assetsRoot, assetPath)
 }
 
 func main() {

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"io"
-	"path/filepath"
-	"strings"
+	"os"
+	"fmt"
+	"log"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -60,27 +60,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	file_extension := strings.Split(mediaType, "/")
-	joinVidExt := fmt.Sprintf("%s.%s", videoID, file_extension[1])
+	assetFileName := getAssetPath(videoID, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetFileName)
 
-	assetPath := filepath.Join(cfg.assetssRoot, joinVidExt)
-	assetDiskPath, err := os.Create(assetPath)
+	dst, err := os.Create(assetDiskPath)
 	if err != nil {
-		log.Fatal("Couldn't create Filepath")
-	}
-	dest, err := io.Copy(assetDiskPath, file)
-	if err != nil {
-		log.Fatal("Couldn't copy file to destination")
-	}
-	defer assetDiskPath.Close()
-
-	fullDataURL, err := cfg.getAssetURL(joinVidExt)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Cannot update video", err)
+		respondWithError(w, http.StatusInternalServerError, "Unable to create file on server", err)
 		return
 	}
-	video.ThumbnailURL = &fullDataURL
-	_, err = cfg.db.UpdateVideo(video)
+	defer dst.Close()
+	if _, err = io.Copy(dst, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
+		return
+	}
+
+	url := cfg.getAssetURL(assetFileName)
+	log.Printf("Generated Thumbnail URL: %s", url)
+	video.ThumbnailURL = &url
+	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
