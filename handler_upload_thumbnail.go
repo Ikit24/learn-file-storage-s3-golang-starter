@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"fmt"
-	"log"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -75,7 +74,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	url := cfg.getAssetURL(assetFileName)
-	log.Printf("Generated Thumbnail URL: %s", url)
 	video.ThumbnailURL = &url
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
