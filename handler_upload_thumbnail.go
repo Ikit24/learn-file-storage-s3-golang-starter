@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"fmt"
+	"mime"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -47,6 +48,15 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
 		return
 	}
+	mediaTypeParsed, _, err := mime.ParseMediaType(mediaType)
+	if err != nil {
+		respondWithError(w, http.StatusUnsupportedMediaType, "Unsupported media type", nil)
+		return
+	}
+	if mediaTypeParsed != "image/jpeg" && mediaTypeParsed != "image/png" {
+		respondWithError(w, http.StatusUnsupportedMediaType, "Unsupported media type", nil)
+		return
+	}
 
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -80,5 +90,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
+
 	respondWithJSON(w, http.StatusOK, video)
 }
