@@ -6,6 +6,8 @@ import (
 	"os"
 	"fmt"
 	"mime"
+	"crypto/rand"
+	"encoding/base64"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -69,8 +71,16 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	assetFileName := getAssetPath(videoID, mediaType)
-	assetDiskPath := cfg.getAssetDiskPath(assetFileName)
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to create key", err)
+		return
+	}
+	randName := base64.RawURLEncoding.EncodeToString(key)
+
+	assetPath := getAssetPath(randName, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
 
 	dst, err := os.Create(assetDiskPath)
 	if err != nil {
@@ -83,7 +93,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	url := cfg.getAssetURL(assetFileName)
+	url := cfg.getAssetURL(assetPath)
 	video.ThumbnailURL = &url
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {

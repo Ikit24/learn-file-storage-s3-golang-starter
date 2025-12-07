@@ -11,7 +11,6 @@ import (
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"github.com/google/uuid"
 )
 
 type apiConfig struct {
@@ -26,10 +25,10 @@ type apiConfig struct {
 	port             string
 }
 
-func getAssetPath(videoID uuid.UUID, mediaType string) string {
+func getAssetPath(name string, mediaType string) string {
 	parts := strings.Split(mediaType, "/")
 	fileExtension := parts[len(parts)-1]
-	return fmt.Sprintf("%s.%s", videoID.String(), fileExtension)
+	return fmt.Sprintf("%s.%s", name, fileExtension)
 }
 
 func (cfg *apiConfig) getAssetURL(assetPath string) string {
