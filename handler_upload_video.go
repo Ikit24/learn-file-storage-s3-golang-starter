@@ -1,7 +1,15 @@
 package main
 
 import (
+	"io"
+	"mime"
 	"net/http"
+	"os"
+	
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
+	"github.com/google/uuid"
 )
 
 func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request) {
@@ -51,4 +59,46 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Invalid invalide file type, only MP4 is allowed", nil)
 		return
 	}
+
+	tempFile, err := os.CreateTemp("", "tubely-upload-*.mp4")
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create temp file", err)
+		return
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	if _, err := io.Copy(tempFile, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not write file to disk", err)
+		return
+	}
+
+	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not reset file pointer", err)
+		return
+	}
+
+	key := getAssetPath(mediaType)
+
+	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput {
+		Bucket:      aws.String(cfg.s3Bucket),
+		Key:         aws.String(key),
+		Body:        tempFile,
+		ContentType: aws.String(mediaType),
+	})
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error uploading file to S3", err)
+		return
+	}
+
+	url := cfg.getObjectURL(key)
+	video.VideoURL = &url
+
+	err = cfg.db.UpdateVideo(video)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error couldn't update video", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, video)
 }

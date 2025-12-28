@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"path/filepath"
-	"strings"
 	"log"
 	"net/http"
 	"os"
@@ -27,20 +24,6 @@ type apiConfig struct {
 	s3CfDistribution string
 	s3Client         *s3.Client
 	port             string
-}
-
-func getAssetPath(name string, mediaType string) string {
-	parts := strings.Split(mediaType, "/")
-	fileExtension := parts[len(parts)-1]
-	return fmt.Sprintf("%s.%s", name, fileExtension)
-}
-
-func (cfg *apiConfig) getAssetURL(assetPath string) string {
-	return fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, assetPath)
-}
-
-func (cfg *apiConfig) getAssetDiskPath(assetPath string) string {
-	return filepath.Join(cfg.assetsRoot, assetPath)
 }
 
 func main() {
