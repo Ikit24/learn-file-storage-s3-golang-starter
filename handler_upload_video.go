@@ -5,7 +5,10 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
+	"fmt"
+	"bytes"
 	
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -74,12 +77,25 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+	fastVid, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not process video", err)
+		return
+	}
+
+	processedFile, err := os.Open(fastVid)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not open video", err)
+		return
+	}
+
+	if _, err := processedFile.Seek(0, io.SeekStart); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Could not reset file pointer", err)
 		return
 	}
+	defer os.Remove(processedFile.Name())
 	
-	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	aspectRatio, err := getVideoAspectRatio(processedFile.Name())
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error determining aspect ratio", err)
 		return
@@ -101,7 +117,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput {
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(key),
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: aws.String(mediaType),
 	})
 	if err != nil {
@@ -119,4 +135,34 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	respondWithJSON(w, http.StatusOK, video)
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	var probeBuf bytes.Buffer
+	outPath := filePath + ".processing"
+	cmd := exec.Command(
+		"ffmpeg",
+		"-i", filePath,
+		"-movflags", "faststart",
+		"-c:v", "libx264", // Force re-encoding video
+		"-c:a", "aac",     // Force re-encoding audio
+		"-f", "mp4",
+		outPath,
+	)
+	cmd.Stderr = &probeBuf
+
+	err := cmd.Run()
+	fmt.Printf("FFmpeg Stderr Output: %s\n", probeBuf.String())
+	if err != nil {
+		return "", fmt.Errorf("ffmpeg failed with output: %s, run error: %w", probeBuf.String(), err)
+	}
+
+	fileInfo, statErr := os.Stat(outPath)
+	if statErr != nil {
+		return "", fmt.Errorf("could not stat processed file: %w", statErr)
+	}
+	if fileInfo.Size() == 0 {
+		return "", fmt.Errorf("processed file is empty after ffmpeg")
+	}
+	return outPath, nil
 }
